@@ -1,0 +1,290 @@
+// Kick Auto Chat - Content Script
+let timerId = null;
+let targetSelector = null;
+let isRunning = false;
+let currentIndex = 0;
+let lastSentMessage = "";
+let toggleDuplicateMarker = false;
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === "PING") {
+    sendResponse({ status: "alive" });
+    return true;
+  }
+
+  if (request.action === "GET_STATUS") {
+    sendResponse({
+      isRunning: isRunning,
+      hasTarget: !!getTargetElement(),
+      targetSelector: targetSelector
+    });
+    return true;
+  }
+
+  if (request.action === "SELECT_TARGET") {
+    selectTargetMode();
+    sendResponse({ status: "SELECTING" });
+    return true;
+  }
+
+  if (request.action === "RESET_TARGET") {
+    targetSelector = null;
+    stopBot();
+    sendResponse({ status: "RESET_COMPLETE" });
+    return true;
+  }
+
+  if (request.action === "START") {
+    const el = getTargetElement();
+    if (!el) {
+      sendResponse({ status: "NO_TARGET" });
+      return true;
+    }
+    startBot(request.settings);
+    sendResponse({ status: "STARTED" });
+    return true;
+  }
+
+  if (request.action === "STOP") {
+    stopBot();
+    sendResponse({ status: "STOPPED" });
+    return true;
+  }
+
+  if (request.action === "CHECK_TARGET") {
+    sendResponse({ hasTarget: !!getTargetElement() });
+    return true;
+  }
+});
+
+function getTargetElement() {
+  if (!targetSelector) return null;
+
+  try {
+    const el = document.querySelector(targetSelector);
+    return el && isElementVisible(el) ? el : null;
+  } catch (_) {
+    targetSelector = null;
+    return null;
+  }
+}
+
+function isElementVisible(el) {
+  if (!el) return false;
+  const style = window.getComputedStyle(el);
+  return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+}
+
+function getUniqueSelector(el) {
+  if (!el) return null;
+  if (el.id) return '#' + el.id;
+  if (el.getAttribute('data-testid')) return `[data-testid="${el.getAttribute('data-testid')}"]`;
+  if (el.getAttribute('data-chat-input')) return '[data-chat-input="true"]';
+  if (el.getAttribute('placeholder')) return `[placeholder="${el.getAttribute('placeholder')}"]`;
+
+  let path = [];
+  let current = el;
+  while (current && current.nodeType === Node.ELEMENT_NODE) {
+    let selector = current.nodeName.toLowerCase();
+    if (selector === 'body' || selector === 'html') {
+      path.unshift(selector);
+      break;
+    }
+    if (current.id) {
+      selector += '#' + current.id;
+      path.unshift(selector);
+      break;
+    } else {
+      let sib = current, nth = 1;
+      while (sib = sib.previousElementSibling) {
+        if (sib.nodeName.toLowerCase() === selector) nth++;
+      }
+      if (nth !== 1) selector += ":nth-of-type(" + nth + ")";
+    }
+    path.unshift(selector);
+    current = current.parentNode;
+  }
+  return path.join(" > ");
+}
+
+function selectTargetMode() {
+  showOverlay("CLICK ON THE KICK CHAT INPUT BOX");
+
+  const clickHandler = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!(e.target instanceof Element)) return;
+
+    const targetEl = e.target.closest('input, textarea, [contenteditable="true"], [role="textbox"]');
+    if (!targetEl) {
+      showOverlay("PLEASE CLICK ON A CHAT INPUT BOX");
+      return;
+    }
+
+    targetSelector = getUniqueSelector(targetEl);
+    stopBot();
+
+    targetEl.style.outline = "3px solid #53FC18";
+    targetEl.style.boxShadow = "0 0 15px rgba(83, 252, 24, 0.6)";
+    setTimeout(() => {
+      targetEl.style.outline = "";
+      targetEl.style.boxShadow = "";
+    }, 1200);
+
+    removeOverlay();
+    document.removeEventListener('click', clickHandler, true);
+
+    try {
+      chrome.runtime.sendMessage({ action: "TARGET_SET_SUCCESS" });
+    } catch (_) {}
+  };
+
+  document.addEventListener('click', clickHandler, true);
+}
+
+function stopBot() {
+  isRunning = false;
+  if (timerId) {
+    clearTimeout(timerId);
+    timerId = null;
+  }
+}
+
+function startBot(settings) {
+  stopBot();
+  isRunning = true;
+  currentIndex = 0;
+
+  const { mode, presetMessages, singleMessage, emoji, minInterval, maxInterval, isSequential, antiDuplicate } = settings || {};
+  const messageList = presetMessages ? presetMessages.split(/\r?\n/).map(m => m.trim()).filter(m => m.length > 0) : [];
+
+  const loop = () => {
+    if (!isRunning) return;
+
+    const currentInput = getTargetElement();
+    if (currentInput) {
+      let msgToSend = "";
+
+      if (mode === 'single') {
+        msgToSend = (singleMessage || "").trim();
+      } else if (mode === 'emoji') {
+        msgToSend = (emoji || "").trim();
+      } else {
+        // List Mode
+        if (messageList.length > 0) {
+          if (isSequential) {
+            msgToSend = messageList[currentIndex];
+            currentIndex = (currentIndex + 1) % messageList.length;
+          } else {
+            msgToSend = messageList[Math.floor(Math.random() * messageList.length)];
+          }
+        }
+      }
+
+      if (msgToSend) {
+        // Anti-Duplicate Bypass (Kick rejects identical consecutive messages)
+        if (antiDuplicate !== false && msgToSend === lastSentMessage) {
+          toggleDuplicateMarker = !toggleDuplicateMarker;
+          msgToSend += toggleDuplicateMarker ? '\u200B' : ' ';
+        }
+        lastSentMessage = msgToSend;
+        sendMessageToElement(currentInput, msgToSend);
+      }
+    }
+
+    const min = Math.max(1, parseInt(minInterval) || 30);
+    const max = Math.max(min, parseInt(maxInterval) || 60);
+    const nextDelay = Math.floor(Math.random() * (max - min + 1) + min) * 1000;
+
+    timerId = setTimeout(loop, nextDelay);
+  };
+
+  // Initial immediate or short-delayed execution
+  timerId = setTimeout(loop, 500);
+}
+
+function sendMessageToElement(inputEl, text) {
+  try {
+    inputEl.focus();
+
+    const isContentEditable = inputEl.getAttribute('contenteditable') === 'true' || inputEl.isContentEditable;
+
+    if (isContentEditable) {
+      // Modern Lexical / React contenteditable support
+      inputEl.focus();
+
+      // Select all existing text and replace
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(inputEl);
+      selection.removeAllRanges();
+      selection.addRange(range);
+
+      // execCommand already emits the input events Lexical/React needs. Dispatching
+      // beforeinput separately makes some Kick editor versions insert text twice.
+      let inserted = false;
+      try {
+        inserted = document.execCommand('insertText', false, text);
+      } catch (_) {}
+
+      if (!inserted) {
+        inputEl.textContent = text;
+        inputEl.dispatchEvent(new InputEvent('input', {
+          bubbles: true,
+          inputType: 'insertText',
+          data: text
+        }));
+      }
+    } else {
+      // Standard Input / Textarea
+      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+      const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+
+      if (inputEl.tagName === 'INPUT' && nativeInputValueSetter) {
+        nativeInputValueSetter.call(inputEl, text);
+      } else if (inputEl.tagName === 'TEXTAREA' && nativeTextAreaValueSetter) {
+        nativeTextAreaValueSetter.call(inputEl, text);
+      } else {
+        inputEl.value = text;
+      }
+
+      inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+      inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    // Trigger exactly one send action. Enter plus a button click can submit twice.
+    setTimeout(() => {
+      const container = inputEl.closest('form') || inputEl.closest('div[class*="chat"]') || inputEl.parentElement?.parentElement || document;
+      const sendBtn = container.querySelector(
+        'button[type="submit"], button[aria-label="Send"], button[aria-label="Send message"], button[aria-label="Chat"], button:has(svg[data-icon="paper-plane"]), button[data-chat-send="true"]'
+      ) || Array.from(container.querySelectorAll('button')).find(b => b.textContent?.trim().toLowerCase() === 'chat');
+
+      if (sendBtn && !sendBtn.disabled) {
+        sendBtn.click();
+        return;
+      }
+
+      const enterDown = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 });
+      const enterUp = new KeyboardEvent('keyup', { bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 });
+      inputEl.dispatchEvent(enterDown);
+      inputEl.dispatchEvent(enterUp);
+    }, 150);
+  } catch (err) {
+    console.error("[Kick Auto Chat] Send error:", err);
+  }
+}
+
+function showOverlay(text) {
+  removeOverlay();
+  const overlay = document.createElement('div');
+  overlay.id = 'kick-bot-overlay';
+  overlay.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#0b0e11;color:#53FC18;padding:12px 24px;border:2px solid #53FC18;border-radius:8px;z-index:999999;font-weight:700;font-family:sans-serif;pointer-events:none;box-shadow:0 10px 30px rgba(0,0,0,0.9);letter-spacing:0.5px;';
+  overlay.innerText = text;
+  document.body.appendChild(overlay);
+}
+
+function removeOverlay() {
+  const overlay = document.getElementById('kick-bot-overlay');
+  if (overlay) overlay.remove();
+}

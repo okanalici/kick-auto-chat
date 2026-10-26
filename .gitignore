@@ -1,0 +1,38 @@
+node_modules/
+dist/
+dist-ssr/
+coverage/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Kilo local state/config
+.kilo/
+
+# Local credentials and private signing keys
+.npmrc
+.netrc
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Browser test artifacts may contain account/session data
+playwright-report/
+test-results/
+playwright/.auth/
+*.har
+
+# Playwright MCP
+.playwright-mcp/

@@ -1,0 +1,16 @@
+{
+  "exclude": ["dist", "node_modules", ".kilo"],
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "types": ["node", "vite/client"],
+    "moduleResolution": "bundler",
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "strict": true,
+    "jsx": "react-jsx",
+    "noEmit": true
+  }
+}

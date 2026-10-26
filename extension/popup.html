@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="error-overlay"><p>Please refresh the Kick.com page to connect.</p></div>
+  <div class="container">
+    <div class="header"><div class="brand"><div class="logo-badge">K</div><h1>Kick Auto Chat</h1></div><div class="badge">1.0.0</div></div>
+    <div class="section-label">TARGET ELEMENT</div>
+    <div id="selection-group"><button id="btn-select" class="btn-outline">Select Chat Input</button><div class="hint">Click the Kick chat input. Escape cancels.</div></div>
+    <div id="target-display" style="display:none;"><span id="target-name">Kick Chat Input</span><button id="btn-reset" class="btn-icon" title="Reset target">Reset</button></div>
+    <div class="divider"></div>
+    <div class="tabs"><button disabled class="tab active" data-mode="preset">List</button><button disabled class="tab" data-mode="single">Single</button><button disabled class="tab" data-mode="emoji">Emoji</button></div>
+    <div id="input-container" class="area-header"><label for="message-list">Messages</label><button id="file-btn" disabled class="text-btn">Import .txt</button><input type="file" id="file-upload" disabled accept=".txt" style="display:none;"></div>
+    <textarea id="message-list" disabled rows="5" placeholder="W Streamer (One per line)"></textarea>
+    <div id="sequential-row" class="checkbox-row"><input type="checkbox" id="sequential-check" disabled><label for="sequential-check">Send in Order (Sequential)</label></div>
+    <div id="emoji-grid" class="emoji-grid" style="display:none;"></div>
+    <div class="timer-row"><div class="input-group"><label for="min-time">Min (s)</label><input type="number" id="min-time" disabled value="30" min="1" max="86400" step="1"></div><div class="input-group"><label for="max-time">Max (s)</label><input type="number" id="max-time" disabled value="60" min="1" max="86400" step="1"></div></div>
+    <div class="status-bar">Status: <span id="status" role="status">Waiting for target...</span></div>
+    <div class="actions"><button id="btn-start" disabled class="btn-primary">START ENGINE</button><button id="btn-stop" class="btn-danger" style="display:none;">STOP</button></div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
